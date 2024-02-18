@@ -10,6 +10,7 @@
 #include <unistd.h>    // close()
 #include <fcntl.h>     // open()
 #include <sys/ioctl.h> // ioctl()
+#include <errno.h>     // errno
 
 const char* dev_name = "/dev/gpiochip4";
 
@@ -46,6 +47,12 @@ void GPIO::close(int port)
 
 int GPIO::read(int port)
 {
+    int fd = ::open(dev_name, O_RDWR);
+    if (fd < 0) {
+        throw GPIOException("Can't open character device");
+        return -1;
+    }
+
     struct gpio_v2_line_request rq;
     rq.offsets[0] = port;
     rq.num_lines = 1;
@@ -54,30 +61,47 @@ int GPIO::read(int port)
     config.flags = GPIO_V2_LINE_FLAG_INPUT;
     rq.config = config;
 
-    struct gpio_v2_line_values data;
-
-    int fd, ret;
-    fd = ::open(dev_name, O_RDONLY);
-    if (fd >= 0) {
-        ret = ioctl(fd, GPIO_V2_GET_LINE_IOCTL, &rq);
-        if (ret == -1 || rq.fd <= 0) {
-            throw GPIOException("Can't get line handle from IOCTL");
-            return ret;
+    int ret = ioctl(fd, GPIO_V2_GET_LINE_IOCTL, &rq);
+    if (ret == -1) {
+        switch (errno)
+        {
+            case EBADFD:
+                throw GPIOException("[GPIO::read] Can't get line handle from IOCTL (invalid file descriptor)");
+                return ret;
+            case EFAULT:
+                throw GPIOException("[GPIO::read] Can't get line handle from IOCTL (inaccessible memory for request result)");
+                return ret;
+            case EINVAL:
+                throw GPIOException("[GPIO::read] Can't get line handle from IOCTL (invalid request or result type)");
+                return ret;
+            case ENOTTY:
+                throw GPIOException("[GPIO::read] Can't get line handle from IOCTL (file descriptor or request not associated with character device)");
+                return ret;
+            default:
+                throw GPIOException("[GPIO::read] Can't get line handle from IOCTL");
+                return ret;
         }
-        ::close(fd);
-        ret = ioctl(rq.fd, GPIO_V2_LINE_GET_VALUES_IOCTL, &data);
-        if (ret == -1) {
-            throw GPIOException("Can't get line value from IOCTL");
-            return ret;
-        }
-        ::close(rq.fd);
-        return data.bits & 1;
     }
-    return -1;
+
+    struct gpio_v2_line_values data;
+    ret = ioctl(rq.fd, GPIO_V2_LINE_GET_VALUES_IOCTL, &data);
+    if (ret == -1 || rq.fd <= 0) {
+        throw GPIOException("Can't get line value from IOCTL");
+        return ret;
+    }
+    ::close(rq.fd);
+    ::close(fd);
+    return data.bits & 1;
 }
 
 void GPIO::write(int port, int value)
 {
+    int fd = ::open(dev_name, O_RDWR);
+    if (fd < 0) {
+        throw GPIOException("Can't open character device");
+        return;
+    }
+
     struct gpio_v2_line_request rq;
     rq.offsets[0] = port;
     rq.num_lines = 1;
@@ -86,25 +110,35 @@ void GPIO::write(int port, int value)
     config.flags = GPIO_V2_LINE_FLAG_OUTPUT;
     rq.config = config;
 
-    int fd, ret;
-    fd = ::open(dev_name, O_RDONLY);
-    if (fd < 0) {
-        throw GPIOException("Can't open dev");
-        return;
+    int ret = ioctl(fd, GPIO_V2_GET_LINE_IOCTL, &rq);
+    if (ret == -1) {
+        switch (errno)
+        {
+            case EBADFD:
+                throw GPIOException("[GPIO::write] Can't get line handle from IOCTL (invalid file descriptor)");
+                return;
+            case EFAULT:
+                throw GPIOException("[GPIO::write] Can't get line handle from IOCTL (inaccessible memory for request result)");
+                return;
+            case EINVAL:
+                throw GPIOException("[GPIO::write] Can't get line handle from IOCTL (invalid request or result type)");
+                return;
+            case ENOTTY:
+                throw GPIOException("[GPIO::write] Can't get line handle from IOCTL (file descriptor or request not associated with character device)");
+                return;
+            default:
+                throw GPIOException("[GPIO::write] Can't get line handle from IOCTL");
+                return;
+        }
     }
-    ret = ioctl(fd, GPIO_V2_GET_LINE_IOCTL, &rq);
-    if (ret == -1 || rq.fd <= 0) {
-        throw GPIOException("Can't get line handle from IOCTL");
-        return;
-    }
-    ::close(fd);
 
     struct gpio_v2_line_values data;
     data.bits |= value;
     ret = ioctl(rq.fd, GPIO_V2_LINE_SET_VALUES_IOCTL, &data);
-    if (ret == -1) {
+    if (ret == -1 || rq.fd <= 0) {
         throw GPIOException("Can't set line value from IOCTL");
         return;
     }
     ::close(rq.fd);
+    ::close(fd);
 }
