@@ -11,6 +11,7 @@
 #include <fcntl.h>     // open()
 #include <sys/ioctl.h> // ioctl()
 #include <errno.h>     // errno
+#include <string.h>    // memset()
 
 const char* dev_name = "/dev/gpiochip4";
 
@@ -54,6 +55,7 @@ int GPIO::read(int port)
     }
 
     struct gpio_v2_line_request rq;
+    memset(&rq, 0, sizeof(rq));
     rq.offsets[0] = port;
     rq.num_lines = 1;
 
@@ -63,24 +65,10 @@ int GPIO::read(int port)
 
     int ret = ioctl(fd, GPIO_V2_GET_LINE_IOCTL, &rq);
     if (ret == -1) {
-        switch (errno)
-        {
-            case EBADFD:
-                throw GPIOException("[GPIO::read] Can't get line handle from IOCTL (invalid file descriptor)");
-                return ret;
-            case EFAULT:
-                throw GPIOException("[GPIO::read] Can't get line handle from IOCTL (inaccessible memory for request result)");
-                return ret;
-            case EINVAL:
-                throw GPIOException("[GPIO::read] Can't get line handle from IOCTL (invalid request or result type)");
-                return ret;
-            case ENOTTY:
-                throw GPIOException("[GPIO::read] Can't get line handle from IOCTL (file descriptor or request not associated with character device)");
-                return ret;
-            default:
-                throw GPIOException("[GPIO::read] Can't get line handle from IOCTL");
-                return ret;
-        }
+        std::string msg = "[GPIO::read] Can't get line handle from IOCTL ";
+        msg += strerror(errno);
+        throw GPIOException(msg);
+        return ret;
     }
 
     struct gpio_v2_line_values data;
@@ -102,34 +90,21 @@ void GPIO::write(int port, int value)
         return;
     }
 
-    struct gpio_v2_line_request rq;
+    gpio_v2_line_request rq;
+    memset(&rq, 0, sizeof(rq));
     rq.offsets[0] = port;
     rq.num_lines = 1;
 
-    struct gpio_v2_line_config config;
+    gpio_v2_line_config config;
     config.flags = GPIO_V2_LINE_FLAG_OUTPUT;
     rq.config = config;
 
     int ret = ioctl(fd, GPIO_V2_GET_LINE_IOCTL, &rq);
     if (ret == -1) {
-        switch (errno)
-        {
-            case EBADFD:
-                throw GPIOException("[GPIO::write] Can't get line handle from IOCTL (invalid file descriptor)");
-                return;
-            case EFAULT:
-                throw GPIOException("[GPIO::write] Can't get line handle from IOCTL (inaccessible memory for request result)");
-                return;
-            case EINVAL:
-                throw GPIOException("[GPIO::write] Can't get line handle from IOCTL (invalid request or result type)");
-                return;
-            case ENOTTY:
-                throw GPIOException("[GPIO::write] Can't get line handle from IOCTL (file descriptor or request not associated with character device)");
-                return;
-            default:
-                throw GPIOException("[GPIO::write] Can't get line handle from IOCTL");
-                return;
-        }
+        std::string msg = "[GPIO::write] Can't get line handle from IOCTL ";
+        msg += strerror(errno);
+        throw GPIOException(msg);
+        return;
     }
 
     struct gpio_v2_line_values data;
