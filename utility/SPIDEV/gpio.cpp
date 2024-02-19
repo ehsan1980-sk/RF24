@@ -58,28 +58,29 @@ int GPIO::read(int port)
     memset(&rq, 0, sizeof(rq));
     rq.offsets[0] = port;
     rq.num_lines = 1;
-
-    struct gpio_v2_line_config config;
-    config.flags = GPIO_V2_LINE_FLAG_INPUT;
-    rq.config = config;
+    rq.config.flags = GPIO_V2_LINE_FLAG_INPUT;
 
     int ret = ioctl(fd, GPIO_V2_GET_LINE_IOCTL, &rq);
     if (ret == -1) {
-        std::string msg = "[GPIO::read] Can't get line handle from IOCTL ";
+        std::string msg = "[GPIO::read] Can't get line handle from IOCTL; ";
         msg += strerror(errno);
         throw GPIOException(msg);
         return ret;
     }
 
     struct gpio_v2_line_values data;
+    data.bits = 0;
+    data.mask = 1;
     ret = ioctl(rq.fd, GPIO_V2_LINE_GET_VALUES_IOCTL, &data);
     if (ret == -1 || rq.fd <= 0) {
-        throw GPIOException("Can't get line value from IOCTL");
+        std::string msg = "[GPIO::read] Can't get line value from IOCTL; ";
+        msg += strerror(errno);
+        throw GPIOException(msg);
         return ret;
     }
     ::close(rq.fd);
     ::close(fd);
-    return data.bits & 1;
+    return data.bits & data.mask;
 }
 
 void GPIO::write(int port, int value)
@@ -94,14 +95,11 @@ void GPIO::write(int port, int value)
     memset(&rq, 0, sizeof(rq));
     rq.offsets[0] = port;
     rq.num_lines = 1;
-
-    gpio_v2_line_config config;
-    config.flags = GPIO_V2_LINE_FLAG_OUTPUT;
-    rq.config = config;
+    rq.config.flags = GPIO_V2_LINE_FLAG_OUTPUT;
 
     int ret = ioctl(fd, GPIO_V2_GET_LINE_IOCTL, &rq);
     if (ret == -1) {
-        std::string msg = "[GPIO::write] Can't get line handle from IOCTL ";
+        std::string msg = "[GPIO::write] Can't get line handle from IOCTL; ";
         msg += strerror(errno);
         throw GPIOException(msg);
         return;
@@ -109,9 +107,12 @@ void GPIO::write(int port, int value)
 
     struct gpio_v2_line_values data;
     data.bits |= value;
+    data.mask = 1;
     ret = ioctl(rq.fd, GPIO_V2_LINE_SET_VALUES_IOCTL, &data);
     if (ret == -1 || rq.fd <= 0) {
-        throw GPIOException("Can't set line value from IOCTL");
+        std::string msg = "[GPIO::write] Can't set line value from IOCTL; ";
+        msg += strerror(errno);
+        throw GPIOException(msg);
         return;
     }
     ::close(rq.fd);
