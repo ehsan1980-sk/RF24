@@ -17,6 +17,9 @@
 // doing this globally ensures the data struct is zero-ed out
 struct gpio_v2_line_request request;
 struct gpio_v2_line_values data;
+struct gpio_v2_line_config_attribute attr_input;
+struct gpio_v2_line_config_attribute attr_output;
+struct gpio_v2_line_config_attribute attr_debounce;
 
 // use this struct to keep a track of open file descriptors
 struct GlobalCache
@@ -34,6 +37,39 @@ struct GlobalCache
             }
         }
         return offset;
+    }
+
+    // should be called automatically on program start.
+    // Here, we do some one-off configuration.
+    GlobalCache()
+    {
+        if (fd < 0) {
+            fd = ::open(chip, O_RDONLY);
+            if (fd < 0) {
+                chip = "/dev/gpiochip0";
+                fd = ::open(chip, O_RDONLY);
+                if (fd < 0) {
+                    std::string msg = "Can't open device ";
+                    msg += chip;
+                    throw GPIOException(msg);
+                }
+            }
+        }
+
+        attr_input.attr.id = GPIO_V2_LINE_ATTR_ID_FLAGS;
+        attr_input.attr.flags = GPIO_V2_LINE_FLAG_INPUT;
+
+        attr_output.attr.id = GPIO_V2_LINE_ATTR_ID_FLAGS;
+        attr_output.attr.flags = GPIO_V2_LINE_FLAG_OUTPUT;
+
+        attr_debounce.attr.id = GPIO_V2_LINE_ATTR_ID_DEBOUNCE;
+        attr_debounce.attr.debounce_period_us = 5;
+
+        strcpy(request.consumer, "RF24 lib");
+        request.config.num_attrs = 3;
+        request.config.attrs[0] = attr_input;
+        request.config.attrs[1] = attr_output;
+        request.config.attrs[2] = attr_debounce;
     }
 
     // Should be called automatically on program exit.
@@ -60,21 +96,6 @@ GPIO::~GPIO()
 
 void GPIO::open(rf24_gpio_pin_t port, int DDR)
 {
-    if (gpio_cache.fd < 0) {
-        gpio_cache.fd = ::open(gpio_cache.chip, O_RDONLY);
-        if (gpio_cache.fd < 0) {
-            gpio_cache.chip = "/dev/gpiochip0";
-            gpio_cache.fd = ::open(gpio_cache.chip, O_RDONLY);
-            if (gpio_cache.fd < 0) {
-                std::string msg = "Can't open device ";
-                msg += gpio_cache.chip;
-                throw GPIOException(msg);
-            }
-        }
-    }
-
-    strcpy(request.consumer, "RF24 lib");
-
     // check if pin is already in use
     int offset = gpio_cache.getPortOffset(port);
     if (offset < 0) { // pin not in use; add it to cached request
@@ -83,11 +104,14 @@ void GPIO::open(rf24_gpio_pin_t port, int DDR)
         request.num_lines += 1;
     }
 
-    // (re)set attribute specific to the pin
-    request.config.num_attrs = request.num_lines;
-    request.config.attrs[offset].attr.id = GPIO_V2_LINE_ATTR_ID_FLAGS;
-    request.config.attrs[offset].attr.flags = DDR ? GPIO_V2_LINE_FLAG_OUTPUT : GPIO_V2_LINE_FLAG_INPUT;
-    request.config.attrs[offset].mask = (1 << offset);
+    // (re)assign attribute(s) specific to the pin
+    if (DDR) {
+        attr_output.mask |= (1LL << offset);
+        attr_debounce.mask = attr_output.mask;
+    }
+    else {
+        attr_input.mask |= (1LL << offset);
+    }
 
     int ret = ioctl(gpio_cache.fd, GPIO_V2_GET_LINE_IOCTL, &request);
     if (ret == -1) {
@@ -124,13 +148,7 @@ int GPIO::read(rf24_gpio_pin_t port)
         return -1;
     }
 
-    // int ret = ioctl(gpio_cache.fd, GPIO_V2_GET_LINE_IOCTL, &request);
-    // if (ret == -1) {
-    //     std::string msg = "[GPIO::read] Can't get line handle from IOCTL; ";
-    //     msg += strerror(errno);
-    //     throw GPIOException(msg);
-    //     return ret;
-    // }
+    data.mask = (1LL << offset);
 
     int ret = ioctl(request.fd, GPIO_V2_LINE_GET_VALUES_IOCTL, &data);
     if (ret == -1) {
@@ -139,7 +157,7 @@ int GPIO::read(rf24_gpio_pin_t port)
         throw GPIOException(msg);
         return ret;
     }
-    return data.bits & (1 << offset);
+    return data.bits & (1LL << offset);
 }
 
 void GPIO::write(rf24_gpio_pin_t port, int value)
@@ -155,19 +173,8 @@ void GPIO::write(rf24_gpio_pin_t port, int value)
         return;
     }
 
-    // int ret = ioctl(gpio_cache.fd, GPIO_V2_GET_LINE_IOCTL, &request);
-    // if (ret == -1) {
-    //     std::string msg = "[GPIO::write] Can't get line handle from IOCTL; ";
-    //     msg += strerror(errno);
-    //     throw GPIOException(msg);
-    //     return;
-    // }
-
-    data.bits &= ~(1 << offset); // de-assert pin output value
-    if (value) {
-        data.bits |= (1 << offset); // assert pin output value
-    }
-    data.mask = (1 << offset); // only change value for specified pin
+    data.bits = value ? (1LL << offset) : 0; // set pin output value
+    data.mask = (1LL << offset);             // only change value for specified pin
 
     int ret = ioctl(request.fd, GPIO_V2_LINE_SET_VALUES_IOCTL, &data);
     if (ret == -1) {
