@@ -107,6 +107,9 @@ void RF24::ce(bool level)
     if (ce_pin != csn_pin) {
 #endif
         digitalWrite(ce_pin, level);
+#ifdef RF24_LINUX
+        delayMicroseconds(5);
+#endif
 #ifndef RF24_LINUX
     }
 #endif

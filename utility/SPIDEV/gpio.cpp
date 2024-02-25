@@ -19,7 +19,6 @@ struct gpio_v2_line_request request;
 struct gpio_v2_line_values data;
 struct gpio_v2_line_config_attribute attr_input;
 struct gpio_v2_line_config_attribute attr_output;
-struct gpio_v2_line_config_attribute attr_debounce;
 
 // use this struct to keep a track of open file descriptors
 struct GlobalCache
@@ -62,14 +61,10 @@ struct GlobalCache
         attr_output.attr.id = GPIO_V2_LINE_ATTR_ID_FLAGS;
         attr_output.attr.flags = GPIO_V2_LINE_FLAG_OUTPUT;
 
-        attr_debounce.attr.id = GPIO_V2_LINE_ATTR_ID_DEBOUNCE;
-        attr_debounce.attr.debounce_period_us = 5;
-
         strcpy(request.consumer, "RF24 lib");
-        request.config.num_attrs = 3;
+        request.config.num_attrs = 2;
         request.config.attrs[0] = attr_input;
         request.config.attrs[1] = attr_output;
-        request.config.attrs[2] = attr_debounce;
     }
 
     // Should be called automatically on program exit.
@@ -104,10 +99,9 @@ void GPIO::open(rf24_gpio_pin_t port, int DDR)
         request.num_lines += 1;
     }
 
-    // (re)assign attribute(s) specific to the pin
+    // adjust attribute's mask specific to the pin and direction
     if (DDR) {
         attr_output.mask |= (1LL << offset);
-        attr_debounce.mask = attr_output.mask;
     }
     else {
         attr_input.mask |= (1LL << offset);
