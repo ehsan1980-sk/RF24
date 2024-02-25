@@ -44,7 +44,7 @@ struct GlobalCache
         if (fd >= 0) {
             close(fd);
         }
-        if (request.fd >= 0) {
+        if (request.fd > 0) {
             close(request.fd);
         }
     }
@@ -86,6 +86,21 @@ void GPIO::open(rf24_gpio_pin_t port, int DDR)
     request.config.attrs[offset].attr.id = GPIO_V2_LINE_ATTR_ID_FLAGS;
     request.config.attrs[offset].attr.flags = DDR ? GPIO_V2_LINE_FLAG_OUTPUT : GPIO_V2_LINE_FLAG_INPUT;
     request.config.attrs[offset].mask = (1 << offset);
+
+    int ret = ioctl(gpio_cache.fd, GPIO_V2_GET_LINE_IOCTL, &request);
+    if (ret == -1) {
+        std::string msg = "[GPIO::open] Can't get line handle from IOCTL; ";
+        msg += strerror(errno);
+        throw GPIOException(msg);
+        return;
+    }
+    ret = ioctl(request.fd, GPIO_V2_LINE_SET_CONFIG_IOCTL, &request.config);
+    if (ret == -1) {
+        std::string msg = "[gpio::open] Can't set line config; ";
+        msg += strerror(errno);
+        throw GPIOException(msg);
+        return;
+    }
 }
 
 void GPIO::close(rf24_gpio_pin_t port)
@@ -107,15 +122,15 @@ int GPIO::read(rf24_gpio_pin_t port)
         return -1;
     }
 
-    int ret = ioctl(gpio_cache.fd, GPIO_V2_GET_LINE_IOCTL, &request);
-    if (ret == -1) {
-        std::string msg = "[GPIO::read] Can't get line handle from IOCTL; ";
-        msg += strerror(errno);
-        throw GPIOException(msg);
-        return ret;
-    }
+    // int ret = ioctl(gpio_cache.fd, GPIO_V2_GET_LINE_IOCTL, &request);
+    // if (ret == -1) {
+    //     std::string msg = "[GPIO::read] Can't get line handle from IOCTL; ";
+    //     msg += strerror(errno);
+    //     throw GPIOException(msg);
+    //     return ret;
+    // }
 
-    ret = ioctl(request.fd, GPIO_V2_LINE_GET_VALUES_IOCTL, &data);
+    int ret = ioctl(request.fd, GPIO_V2_LINE_GET_VALUES_IOCTL, &data);
     if (ret == -1) {
         std::string msg = "[GPIO::read] Can't get line value from IOCTL; ";
         msg += strerror(errno);
@@ -138,13 +153,13 @@ void GPIO::write(rf24_gpio_pin_t port, int value)
         return;
     }
 
-    int ret = ioctl(gpio_cache.fd, GPIO_V2_GET_LINE_IOCTL, &request);
-    if (ret == -1) {
-        std::string msg = "[GPIO::write] Can't get line handle from IOCTL; ";
-        msg += strerror(errno);
-        throw GPIOException(msg);
-        return;
-    }
+    // int ret = ioctl(gpio_cache.fd, GPIO_V2_GET_LINE_IOCTL, &request);
+    // if (ret == -1) {
+    //     std::string msg = "[GPIO::write] Can't get line handle from IOCTL; ";
+    //     msg += strerror(errno);
+    //     throw GPIOException(msg);
+    //     return;
+    // }
 
     data.bits &= ~(1 << offset); // de-assert pin output value
     if (value) {
@@ -152,7 +167,7 @@ void GPIO::write(rf24_gpio_pin_t port, int value)
     }
     data.mask = (1 << offset); // only change value for specified pin
 
-    ret = ioctl(request.fd, GPIO_V2_LINE_SET_VALUES_IOCTL, &data);
+    int ret = ioctl(request.fd, GPIO_V2_LINE_SET_VALUES_IOCTL, &data);
     if (ret == -1) {
         std::string msg = "[GPIO::write] Can't set line value from IOCTL; ";
         msg += strerror(errno);
