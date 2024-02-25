@@ -9,8 +9,8 @@
 #include <unistd.h>    // close()
 #include <fcntl.h>     // open()
 #include <sys/ioctl.h> // ioctl()
-#include <errno.h>     // errno
-#include <string.h>    // memset()
+#include <errno.h>     // errno, strerror()
+#include <string.h>    // std::string, strcpy()
 #include "gpio.h"
 
 // instantiate some global structs to use as cache
@@ -72,6 +72,8 @@ void GPIO::open(rf24_gpio_pin_t port, int DDR)
             }
         }
     }
+
+    strcpy(request.consumer, "RF24 lib");
 
     // check if pin is already in use
     int offset = gpio_cache.getPortOffset(port);
