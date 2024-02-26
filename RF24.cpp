@@ -108,7 +108,7 @@ void RF24::ce(bool level)
 #endif
         digitalWrite(ce_pin, level);
 #ifdef RF24_LINUX
-        delayMicroseconds(5);
+        delayMicroseconds(1); // SPIDEV driver's GPIO needs a delay here (for some reason)
 #endif
 #ifndef RF24_LINUX
     }
