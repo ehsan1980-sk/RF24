@@ -107,12 +107,15 @@ void GPIO::open(rf24_gpio_pin_t port, int DDR)
         attr_input.mask |= (1LL << offset);
     }
 
-    int ret = ioctl(gpio_cache.fd, GPIO_V2_GET_LINE_IOCTL, &request);
-    if (ret == -1) {
-        std::string msg = "[GPIO::open] Can't get line handle from IOCTL; ";
-        msg += strerror(errno);
-        throw GPIOException(msg);
-        return;
+    int ret;
+    if (request.fd <= 0) {
+        ret = ioctl(gpio_cache.fd, GPIO_V2_GET_LINE_IOCTL, &request);
+        if (ret == -1) {
+            std::string msg = "[GPIO::open] Can't get line handle from IOCTL; ";
+            msg += strerror(errno);
+            throw GPIOException(msg);
+            return;
+        }
     }
     ret = ioctl(request.fd, GPIO_V2_LINE_SET_CONFIG_IOCTL, &request.config);
     if (ret == -1) {
