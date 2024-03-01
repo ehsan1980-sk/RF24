@@ -45,6 +45,7 @@ struct GlobalCache
         }
         request.num_lines = 1;
         strcpy(request.consumer, "RF24 lib");
+        data.mask = 1ULL; // only change value for specified pin
     }
 
     // Should be called automatically on program exit.
@@ -124,7 +125,6 @@ int GPIO::read(rf24_gpio_pin_t port)
     }
 
     data.bits = 0ULL;
-    data.mask = 1ULL;
 
     int ret = ioctl(pin->second, GPIO_V2_LINE_GET_VALUES_IOCTL, &data);
     if (ret == -1) {
@@ -150,7 +150,6 @@ void GPIO::write(rf24_gpio_pin_t port, int value)
     }
 
     data.bits = value;
-    data.mask = 1ULL; // only change value for specified pin
 
     int ret = ioctl(pin->second, GPIO_V2_LINE_SET_VALUES_IOCTL, &data);
     if (ret == -1) {
